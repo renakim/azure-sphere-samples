@@ -72,10 +72,19 @@ static bool isConnected = false;
 // Business logic
 static void DeviceMoved(void);
 static void SetThermometerTelemetryUploadEnabled(bool uploadEnabled, bool fromCloud);
+#if 0
 static bool telemetryUploadEnabled = false; // False by default - do not send telemetry until told
                                             // by the user or the cloud
+#else
+static bool telemetryUploadEnabled = true;
+#endif
 
-static const char *serialNumber = "TEMPMON-01234";
+// Network config
+static void SetNetworkInterface(const char *interfaceName);
+
+static const char *serialNumber = "AzsphereW5500-01";
+
+static const char NetworkInterface[] = "eth0";
 
 /// <summary>
 ///     Signal handler for termination requests. This handler must be async-signal-safe.
@@ -85,6 +94,23 @@ static void TerminationHandler(int signalNumber)
     // Don't use Log_Debug here, as it is not guaranteed to be async-signal-safe.
     exitCode = ExitCode_TermHandler_SigTerm;
 }
+
+static void SetNetworkInterface(const char *interfaceName)
+{
+    Networking_IpConfig ipConfig;
+    Networking_IpConfig_Init(&ipConfig);
+
+    Networking_IpConfig_EnableDynamicIp(&ipConfig);
+
+    int result = Networking_IpConfig_Apply(interfaceName, &ipConfig);
+    Networking_IpConfig_Destroy(&ipConfig);
+    if (result != 0) {
+        Log_Debug("ERROR: Networking_IpConfig_Apply: %d (%s)\n", errno, strerror(errno));
+        return;
+    }
+    Log_Debug("INFO: Set DHCP network interface: %s.\n", interfaceName);
+}
+
 
 /// <summary>
 ///     Main entry point for this sample.
@@ -96,6 +122,9 @@ int main(int argc, char *argv[])
     bool isNetworkingReady = false;
     if ((Networking_IsNetworkingReady(&isNetworkingReady) == -1) || !isNetworkingReady) {
         Log_Debug("WARNING: Network is not ready. Device cannot connect until network is ready.\n");
+
+        // Network setting
+        SetNetworkInterface(NetworkInterface);
     }
 
     exitCode = Options_ParseArgs(argc, argv);
@@ -256,7 +285,7 @@ static ExitCode InitPeripheralsAndHandlers(void)
         return ExitCode_Init_EventLoop;
     }
 
-    struct timespec telemetryPeriod = {.tv_sec = 5, .tv_nsec = 0};
+    struct timespec telemetryPeriod = {.tv_sec = 30, .tv_nsec = 0};
     telemetryTimer =
         CreateEventLoopPeriodicTimer(eventLoop, &TelemetryTimerCallbackHandler, &telemetryPeriod);
     if (telemetryTimer == NULL) {
